@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>決鬥麻將 - 規則說明</title>
+    <style>
+        :root {
+            --bg-dark: #121212;
+            --bg-card: #1e1e1e;
+            --text-main: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --accent-a: #4caf50; /* Phase A color */
+            --accent-b: #f44336; /* Phase B color */
+            --highlight: #ffca28;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            color: var(--highlight);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: var(--text-muted);
+            margin-bottom: 50px;
+            font-size: 1.1rem;
+        }
+
+        /* 卡片樣式 */
+        .rule-card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            border-left: 5px solid transparent;
+        }
+
+        .phase-a { border-left-color: var(--accent-a); }
+        .phase-b { border-left-color: var(--accent-b); }
+        .phase-win { border-left-color: var(--highlight); }
+
+        h2 {
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+            font-size: 1.5rem;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-left: 15px;
+            color: #000;
+        }
+        .badge-a { background: var(--accent-a); }
+        .badge-b { background: var(--accent-b); }
+
+        .rule-list {
+            padding-left: 20px;
+        }
+        .rule-list li {
+            margin-bottom: 10px;
+        }
+
+        /* 核心流程圖示化 */
+        .flow-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            background: rgba(255,255,255,0.05);
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+        }
+        .step-num {
+            background: var(--text-muted);
+            color: #000;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 24px;
+            font-weight: bold;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+        .step-content strong {
+            color: var(--highlight);
+        }
+
+        .highlight-box {
+            background: rgba(244, 67, 54, 0.1);
+            border: 1px solid var(--accent-b);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        /* 按鈕 */
+        .btn-start {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            background: var(--highlight);
+            color: #000;
+            text-align: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            text-decoration: none;
+            border-radius: 8px;
+            margin-top: 50px;
+            transition: transform 0.2s;
+        }
+        .btn-start:hover {
+            transform: scale(1.02);
+            background: #ffdb58;
+        }
+
+        @media (max-width: 600px) {
+            h1 { font-size: 2rem; }
+            .container { padding: 20px 15px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>決鬥麻將</h1>
+    <p class="subtitle">基於日本麻將的 1v1 心理博弈變體規則</p>
+
+    <div class="rule-card">
+        <h2>基本設定</h2>
+        <ul class="rule-list">
+            <li><strong>人數：</strong> 2人（1對1）。</li>
+            <li><strong>點數：</strong> 起始 30,000 點。</li>
+            <li><strong>勝利條件：</strong> 結算時點棒多者獲勝，或某方歸零。</li>
+            <li><strong>莊家：</strong> 首局隨機，之後由和牌者連莊。</li>
+        </ul>
+    </div>
+
+    <div class="rule-card phase-a">
+        <h2>Phase A：常規戰 <span class="badge badge-a">準備階段</span></h2>
+        <p>遊戲開始時如同一般的日本麻將，雙方輪流摸打。</p>
+        <ul class="rule-list">
+            <li><strong>回合限制：</strong> 18 巡。</li>
+            <li><strong>鳴牌：</strong> 允許吃、碰、槓。</li>
+            <li><strong>聽牌宣告：</strong>
+                <ul>
+                    <li>當任意一方聽牌時，可立即宣告「聽牌」。</li>
+                    <li><strong>不需要門清</strong>，鳴牌後亦可宣告。</li>
+                    <li>如果是門清狀態，您可以選擇立直（增加翻數），或默聽宣告。</li>
+                </ul>
+            </li>
+            <li><strong>階段結束：</strong> 一旦有人宣告聽牌，Phase A 立即結束，進入決鬥階段。</li>
+        </ul>
+    </div>
+
+    <div class="rule-card phase-b">
+        <h2>Phase B：決鬥戰 <span class="badge badge-b">核心玩法</span></h2>
+        <p>這是本規則最刺激的部分。聽牌者（攻方）與未聽牌者（守方）將進行攻防。</p>
+        
+        <div class="flow-container">
+            <div class="step">
+                <div class="step-num">1</div>
+                <div class="step-content">
+                    <strong>識破（猜牌）：</strong><br>
+                    守方需觀察對手的棄牌，並指出 <strong>2 張</strong> 對手可能聽的牌。
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <div class="step-content">
+                    <strong>判定：</strong><br>
+                    - <strong>猜中：</strong> 守方防守成功！該局強制結束（流局或罰分，視約定規則）。<br>
+                    - <strong>猜錯：</strong> 攻方獲得「5次自摸權」。
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <div class="step-content">
+                    <strong>狂暴自摸（Rush）：</strong><br>
+                    攻方從牌山連續摸 <strong>5 張牌</strong>。<br>
+                    - 若摸到和了牌：可宣告自摸胡牌。<br>
+                    - 若5次皆未中：回到「識破」步驟，守方再次猜 2 張牌，如此循環。
+                </div>
+            </div>
+        </div>
+
+        <div class="highlight-box">
+            <h3>⚠️ 高分賭博規則</h3>
+            <p>如果是多面聽（聽好幾張牌），當攻方摸到低點數的和了牌時，可以<strong>選擇不胡</strong>（將牌蓋住打出），繼續利用剩餘的自摸次數去拚高點數的牌。</p>
+        </div>
+    </div>
+
+    <div class="rule-card phase-win">
+        <h2>流局與結算</h2>
+        <ul class="rule-list">
+            <li><strong>牌山耗盡：</strong> 若循環至牌山無牌，則視為流局。</li>
+            <li><strong>自摸失敗：</strong> 若攻方 5 次自摸機會用完且未胡牌，且牌山仍有牌，則權利交回守方進行猜牌。</li>
+        </ul>
+    </div>
+
+    <a href="duel_mahjong.html" class="btn-start">開始遊戲</a>
+
+    <p style="text-align: center; margin-top: 30px; font-size: 0.8rem; color: #666;">
+        Built by Gemini AI Strategy Partner
+    </p>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>二人麻將 - 決鬥變體</title>
+    <style>
+        :root {
+            --bg-color: #2e7d32;
+            --tile-w: 40px;
+            --tile-h: 56px;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1b5e20;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #game-area {
+            width: 800px;
+            height: 600px;
+            background-color: var(--bg-color);
+            border: 8px solid #5d4037;
+            border-radius: 10px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        
+        /* 區域佈局 */
+        .player-zone {
+            padding: 10px;
+            min-height: 120px;
+        }
+        .ai-zone {
+            border-bottom: 2px solid rgba(255,255,255,0.2);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .user-zone {
+            border-top: 2px solid rgba(255,255,255,0.2);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .center-zone {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* 牌的樣式 */
+        .tile {
+            width: var(--tile-w);
+            height: var(--tile-h);
+            background-color: #fff;
+            color: #000;
+            border-radius: 4px;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 32px;
+            margin: 2px;
+            cursor: pointer;
+            box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            user-select: none;
+            position: relative;
+            transition: transform 0.1s;
+        }
+        .tile:hover { transform: translateY(-5px); }
+        .tile.selected { border: 2px solid red; transform: translateY(-10px); }
+        .tile.hidden { background-color: #d88e6c; color: transparent; } /* 牌背 */
+        
+        /* 牌河 */
+        .river {
+            display: flex;
+            flex-wrap: wrap;
+            width: 300px;
+            height: 80px;
+            background: rgba(0,0,0,0.1);
+            border-radius: 5px;
+            padding: 5px;
+            justify-content: flex-start;
+            align-content: flex-start;
+        }
+        .river .tile { width: 25px; height: 35px; font-size: 20px; margin: 1px; cursor: default; }
+        .river .tile:hover { transform: none; }
+
+        /* 資訊面板 */
+        #info-panel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 100;
+            display: none;
+        }
+        #phase-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-weight: bold;
+            background: rgba(0,0,0,0.3);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+        #score-board {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-family: monospace;
+            font-size: 16px;
+        }
+
+        /* 按鈕與控制 */
+        .controls { margin-top: 10px; }
+        button {
+            background: #ffb300;
+            border: none;
+            padding: 8px 16px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+            margin: 0 5px;
+        }
+        button:hover { background: #ffca28; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+        }
+        .modal-content {
+            background: #fff;
+            color: #333;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+        }
+        .tile-picker {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-area">
+    <div id="score-board">
+        AI: <span id="score-ai">30000</span> | You: <span id="score-user">30000</span>
+    </div>
+    <div id="phase-indicator">Phase: A (Normal)</div>
+
+    <div class="player-zone ai-zone">
+        <div id="ai-hand">
+            </div>
+        <div class="river" id="ai-river"></div>
+    </div>
+
+    <div class="center-zone">
+        <div id="status-msg" style="font-size: 24px; text-shadow: 1px 1px 2px black;">等待開始...</div>
+        <div id="deck-info" style="margin-top:5px; font-size:14px; opacity: 0.8;">剩餘牌山: <span id="wall-count">0</span></div>
+    </div>
+
+    <div class="player-zone user-zone">
+        <div class="river" id="user-river"></div>
+        <div id="user-hand"></div>
+        <div class="controls">
+            <button id="btn-tenpai" onclick="declareTenpai()">宣告聽牌 (Tenpai)</button>
+            <button id="btn-restart" onclick="initGame()" style="background:#e53935; color:white;">重新開始</button>
+        </div>
+    </div>
+</div>
+
+<div id="info-panel">
+    <h2 id="info-title">Title</h2>
+    <p id="info-text">Message</p>
+    <button onclick="closeInfo()">OK</button>
+</div>
+
+<div class="modal-overlay" id="picker-modal">
+    <div class="modal-content">
+        <h3>Phase B: 指出兩張對手聽的牌</h3>
+        <p>請選擇 2 張牌：<span id="picked-display"></span></p>
+        <div class="tile-picker" id="tile-picker-area"></div>
+        <br>
+        <button onclick="submitGuess()">確認指出</button>
+    </div>
+</div>
+
+<script>
+    // --- 遊戲常數與設定 ---
+    const TILES = [
+        // 萬子 1-9 (各4張)
+        "🀇","🀈","🀉","🀊","🀋","🀌","🀍","🀎","🀏",
+        // 筒子 1-9
+        "🀙","🀚","🀛","🀜","🀝","🀞","🀟","🀠","🀡",
+        // 索子 1-9
+        "🀐","🀑","🀒","🀓","🀔","🀕","🀖","🀗","🀘",
+        // 字牌 東南西北白發中
+        "🀀","🀁","🀂","🀃","🀆","🀅","🀄"
+    ];
+    // 為了簡化，對應的 ID 陣列
+    let TILE_IDS = [];
+    TILES.forEach((t, i) => {
+        for(let j=0; j<4; j++) TILE_IDS.push({id: i, char: t, uid: i*4+j});
+    });
+
+    let deck = [];
+    let players = {
+        user: { hand: [], river: [], score: 30000, isTenpai: false, waits: [] },
+        ai: { hand: [], river: [], score: 30000, isTenpai: false, waits: [] }
+    };
+    let turn = 'user'; // 'user' or 'ai'
+    let phase = 'A'; // 'A', 'B_GUESS', 'B_DRAW'
+    let attacker = null; // 誰聽牌
+    let defender = null; // 誰在猜
+    let drawCount = 0; // Phase B 的自摸計數
+    let maxDraws = 5;
+    let turnCount = 0;
+    let maxTurns = 18; // Phase A 限制
+    let selectedGuess = [];
+
+    // --- 遊戲初始化 ---
+    function initGame() {
+        // 重置狀態
+        deck = shuffle([...TILE_IDS]);
+        players.user.hand = [];
+        players.user.river = [];
+        players.user.isTenpai = false;
+        players.user.waits = []; // 實際遊戲需要運算，這裡簡化為手動或隨機
+        
+        players.ai.hand = [];
+        players.ai.river = [];
+        players.ai.isTenpai = false;
+        players.ai.waits = [];
+
+        turn = 'user'; 
+        phase = 'A';
+        turnCount = 0;
+        
+        // 發牌 (13張)
+        for(let i=0; i<13; i++) {
+            drawTile('user');
+            drawTile('ai');
+        }
+        // 排序手牌
+        sortHand('user');
+        sortHand('ai');
+
+        // 使用者先摸第14張
+        drawTile('user');
+
+        updateUI();
+        showStatus("Phase A: 你的回合，請打出一張牌");
+        document.getElementById('btn-tenpai').disabled = false;
+    }
+
+    function shuffle(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
+    function drawTile(who) {
+        if(deck.length === 0) return null;
+        const tile = deck.pop();
+        players[who].hand.push(tile);
+        return tile;
+    }
+
+    function sortHand(who) {
+        players[who].hand.sort((a,b) => a.id - b.id);
+    }
+
+    // --- 核心互動：Phase A ---
+
+    function handleTileClick(index) {
+        if(phase !== 'A' || turn !== 'user') return;
+        
+        // 打牌
+        const discarded = players.user.hand.splice(index, 1)[0];
+        players.user.river.push(discarded);
+        sortHand('user');
+        updateUI();
+
+        // 檢查流局
+        if(turnCount >= maxTurns * 2) {
+            showInfo("流局", "雙方未聽牌，本局結束");
+            return; // 簡單處理
+        }
+
+        // 輪到 AI
+        turn = 'ai';
+        turnCount++;
+        showStatus("AI 思考中...");
+        
+        setTimeout(() => aiTurn(), 1000);
+    }
+
+    function aiTurn() {
+        if(phase !== 'A') return;
+
+        // 1. AI 摸牌
+        drawTile('ai');
+        
+        // 2. AI 判斷是否聽牌 (模擬：5%機率聽牌)
+        if(!players.ai.isTenpai && Math.random() < 0.05 && deck.length > 10) {
+            aiDeclareTenpai();
+            return;
+        }
+
+        // 3. AI 打牌 (隨機打一張)
+        const discardIdx = Math.floor(Math.random() * players.ai.hand.length);
+        const discarded = players.ai.hand.splice(discardIdx, 1)[0];
+        players.ai.river.push(discarded);
+        sortHand('ai');
+        
+        turn = 'user';
+        turnCount++;
+        
+        // 玩家摸牌
+        drawTile('user');
+        sortHand('user'); // 為了讓新摸的牌歸位 (這裡簡單處理，通常新摸的牌放最右邊)
+        updateUI();
+        showStatus("Phase A: 你的回合");
+    }
+
+    // --- 宣告聽牌 (進入 Phase B) ---
+
+    function declareTenpai() {
+        if(phase !== 'A' || turn !== 'user') return;
+        
+        // 這裡為了演示，我們假設玩家按下按鈕就是聽牌
+        // 實際開發需要檢查手牌是否有聽
+        // 並且需要玩家選擇「聽什麼牌」(Waits)
+        
+        // 彈出選擇視窗，讓玩家設定自己聽哪兩張牌 (模擬聽牌邏輯)
+        // 這裡為了簡化，我們直接進入 Phase B，假設玩家聽的是隨機兩張，或者之後補做設定邏輯
+        // *但在這個規則裡，被指認的牌必須是「和了牌」。
+        
+        // 為了Demo流暢，我們假設玩家現在設定聽牌：
+        const wait1 = prompt("【DEBUG】請輸入您聽的第一張牌 ID (0-33, 例如 0是1萬, 9是1筒):", "0");
+        const wait2 = prompt("【DEBUG】請輸入您聽的第二張牌 ID (若單騎聽牌可輸入一樣):", "1");
+        
+        if(wait1 === null) return;
+
+        players.user.isTenpai = true;
+        players.user.waits = [parseInt(wait1), parseInt(wait2)];
+        
+        attacker = 'user';
+        defender = 'ai';
+        startPhaseB();
+    }
+
+    function aiDeclareTenpai() {
+        players.ai.isTenpai = true;
+        // AI 隨機聽兩張牌
+        players.ai.waits = [Math.floor(Math.random()*34), Math.floor(Math.random()*34)];
+        
+        showInfo("AI 宣告", "AI 宣告聽牌！進入 Phase B！");
+        attacker = 'ai';
+        defender = 'user';
+        startPhaseB();
+    }
+
+    // --- Phase B 邏輯 ---
+
+    function startPhaseB() {
+        phase = 'B_GUESS';
+        drawCount = 0;
+        document.getElementById('btn-tenpai').disabled = true;
+        updateUI();
+
+        if(defender === 'user') {
+            showStatus("Phase B: AI 聽牌了！請指出 2 張它可能聽的牌！");
+            openPickerModal();
+        } else {
+            showStatus("Phase B: 你聽牌了！AI 正在猜測你的牌...");
+            setTimeout(aiGuess, 2000);
+        }
+    }
+
+    // -- 猜牌環節 --
+
+    // AI 猜牌
+    function aiGuess() {
+        // AI 隨機猜兩張
+        const g1 = Math.floor(Math.random()*34);
+        const g2 = Math.floor(Math.random()*34);
+        
+        let msg = `AI 指出了 ${getChar(g1)} 和 ${getChar(g2)}`;
+        
+        // 檢查是否猜中玩家的聽牌
+        const userWaits = players.user.waits; // Array of IDs
+        const hit = userWaits.includes(g1) || userWaits.includes(g2);
+
+        if(hit) {
+            showInfo("Phase B 結束", `${msg}。哎呀！AI 猜中了你的和了牌！該局結束 (防守成功)。`);
+            // 結算邏輯略
+        } else {
+            showInfo("Phase B", `${msg}。AI 猜錯了！你獲得 5 次自摸機會。`, () => {
+                startDrawPhase();
+            });
+        }
+    }
+
+    // 玩家猜牌 UI
+    function openPickerModal() {
+        const area = document.getElementById('tile-picker-area');
+        area.innerHTML = '';
+        selectedGuess = [];
+        document.getElementById('picked-display').innerText = '';
+
+        // 生成所有種類的牌供選擇
+        for(let i=0; i<34; i++) {
+            let d = document.createElement('div');
+            d.className = 'tile';
+            d.innerText = TILES[i];
+            d.onclick = () => selectGuessTile(i, d);
+            area.appendChild(d);
+        }
+        document.getElementById('picker-modal').style.display = 'flex';
+    }
+
+    function selectGuessTile(id, el) {
+        if(selectedGuess.includes(id)) {
+            // 取消選擇
+            selectedGuess = selectedGuess.filter(x => x !== id);
+            el.classList.remove('selected');
+        } else {
+            if(selectedGuess.length < 2) {
+                selectedGuess.push(id);
+                el.classList.add('selected');
+            }
+        }
+        // 更新顯示
+        const chars = selectedGuess.map(i => TILES[i]).join(' ');
+        document.getElementById('picked-display').innerText = chars;
+    }
+
+    function submitGuess() {
+        if(selectedGuess.length !== 2) {
+            alert("請選擇兩張牌");
+            return;
+        }
+        document.getElementById('picker-modal').style.display = 'none';
+        
+        // 檢查是否猜中 AI 的聽牌
+        const aiWaits = players.ai.waits;
+        const hit = aiWaits.includes(selectedGuess[0]) || aiWaits.includes(selectedGuess[1]);
+        
+        if(hit) {
+            showInfo("Phase B 結束", "漂亮！你猜中了 AI 的和了牌！防守成功！");
+        } else {
+            showInfo("Phase B", "你沒猜中... AI 獲得 5 次自摸機會。", () => {
+                startDrawPhase();
+            });
+        }
+    }
+
+    // -- 自摸環節 (Phase B part 2) --
+    
+    function startDrawPhase() {
+        phase = 'B_DRAW';
+        drawCount = 0;
+        executeDrawLoop();
+    }
+
+    function executeDrawLoop() {
+        if(deck.length === 0) {
+            showInfo("流局", "牌山已空。");
+            return;
+        }
+
+        if(drawCount >= maxDraws) {
+            // 5次摸完沒中，回到猜牌階段
+            showStatus("5次自摸失敗，回到猜牌階段...");
+            setTimeout(() => {
+                startPhaseB(); // 迴圈：再次猜牌
+            }, 1500);
+            return;
+        }
+
+        drawCount++;
+        const tile = deck.pop();
+        updateUI(); // 更新牌山顯示
+        
+        // 顯示摸到的牌
+        showStatus(`${attacker === 'user' ? '你' : 'AI'} 第 ${drawCount} 次自摸: ${tile.char}`);
+
+        // 檢查是否自摸
+        const waits = players[attacker].waits;
+        const isWin = waits.includes(tile.id);
+
+        if(isWin) {
+            // 規則9: 多面聽可以選擇拒絕胡低點數 (這裡簡化為詢問玩家，AI則直接胡)
+            if(attacker === 'user') {
+                setTimeout(() => {
+                    if(confirm(`摸到了 ${tile.char}！這是你的和了牌。要宣告自摸胡牌嗎？\n(取消則視為過水，繼續自摸/猜牌)`)) {
+                        handleWin(attacker, tile);
+                    } else {
+                        // 放回/打出 (規則說打出)
+                        players.user.river.push(tile);
+                        updateUI();
+                        setTimeout(executeDrawLoop, 1000);
+                    }
+                }, 100);
+            } else {
+                // AI 簡單邏輯：摸到就胡
+                setTimeout(() => {
+                    handleWin('ai', tile);
+                }, 1000);
+            }
+        } else {
+            // 沒中，打入牌河 (或反蓋，這裡簡化為打入牌河)
+            players[attacker].river.push(tile);
+            updateUI();
+            setTimeout(executeDrawLoop, 1000);
+        }
+    }
+
+    function handleWin(winner, tile) {
+        showInfo("胡牌！", `${winner === 'user' ? '你' : 'AI'} 自摸了 ${tile.char}！ 獲得勝利！`);
+        // 這裡可以加分並重置遊戲
+    }
+
+    // --- UI 輔助 ---
+
+    function updateUI() {
+        // Render User Hand
+        const userDiv = document.getElementById('user-hand');
+        userDiv.innerHTML = '';
+        players.user.hand.forEach((tile, idx) => {
+            let d = document.createElement('div');
+            d.className = 'tile';
+            d.innerText = tile.char;
+            d.onclick = () => handleTileClick(idx);
+            userDiv.appendChild(d);
+        });
+
+        // Render AI Hand (Hidden)
+        const aiDiv = document.getElementById('ai-hand');
+        aiDiv.innerHTML = '';
+        players.ai.hand.forEach(() => {
+            let d = document.createElement('div');
+            d.className = 'tile hidden';
+            aiDiv.appendChild(d);
+        });
+
+        // Render Rivers
+        renderRiver('user', 'user-river');
+        renderRiver('ai', 'ai-river');
+
+        // Stats
+        document.getElementById('wall-count').innerText = deck.length;
+        document.getElementById('phase-indicator').innerText = `Phase: ${phase} ${phase==='B_DRAW' ? '(Drawing '+drawCount+'/5)' : ''}`;
+    }
+
+    function renderRiver(who, elId) {
+        const div = document.getElementById(elId);
+        div.innerHTML = '';
+        players[who].river.forEach(tile => {
+            let d = document.createElement('div');
+            d.className = 'tile';
+            d.innerText = tile.char;
+            div.appendChild(d);
+        });
+    }
+
+    function showStatus(text) {
+        document.getElementById('status-msg').innerText = text;
+    }
+
+    function getChar(id) {
+        return TILES[id];
+    }
+
+    let onInfoClose = null;
+    function showInfo(title, text, callback) {
+        document.getElementById('info-title').innerText = title;
+        document.getElementById('info-text').innerText = text;
+        document.getElementById('info-panel').style.display = 'block';
+        onInfoClose = callback;
+    }
+
+    function closeInfo() {
+        document.getElementById('info-panel').style.display = 'none';
+        if(onInfoClose) {
+            const cb = onInfoClose;
+            onInfoClose = null;
+            cb();
+        }
+    }
+
+    // Start
+    initGame();
+
+</script>
+</body>
+</html>
