@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>二人麻將 - 識破透明版</title>
+    <title>二人麻將 v0.1.1 - 自摸牌優化版</title>
     <style>
         :root {
             --bg-color: #2e7d32;
@@ -162,7 +162,7 @@
             transition: all 0.3s;
         }
         
-        /* [New] Transparent Glass Mode for Guessing */
+        /* Transparent Glass Mode */
         .modal-overlay.glass-mode {
             background: rgba(0, 0, 0, 0.2); /* 變得很淡，看得到後面 */
             backdrop-filter: none; /* 移除模糊 */
@@ -279,7 +279,6 @@
     let pickerMode = '', selectedTiles = [];
     let pendingDiscard = null, pendingDiscarder = null;
 
-    // --- Init ---
     function resetFullGame() { players.user.score = 30000; players.ai.score = 30000; startNewRound(); }
 
     function startNewRound() {
@@ -300,10 +299,11 @@
 
         for(let i=0; i<13; i++) { drawTile('user'); drawTile('ai'); }
         sortHand('user'); sortHand('ai');
-        drawTile('user'); 
+        drawTile('user'); // 初始發牌的第14張
 
         document.getElementById('next-round-btn').style.display = 'none';
-        resetDoraUI(); updateUI();
+        resetDoraUI(); 
+        updateUI();
         showStatus("Phase A: 你的回合");
         document.getElementById('btn-tenpai').disabled = false;
         closePicker(); hideNakiButtons();
@@ -317,7 +317,6 @@
         return array;
     }
 
-    // --- Round End ---
     function onRoundEnd() {
         revealAIHand();
         document.getElementById('next-round-btn').style.display = 'block';
@@ -326,7 +325,6 @@
         hideNakiButtons();
     }
 
-    // --- Dora ---
     function getNextDora(id) {
         if(id <= 8) return (id === 8) ? 0 : id + 1;
         if(id <= 17) return (id === 17) ? 9 : id + 1;
@@ -351,7 +349,6 @@
         updateUI();
     }
 
-    // --- Core Logic ---
     function drawTile(who) {
         if(deck.length === 0) return null;
         const tile = deck.pop(); players[who].hand.push(tile); return tile;
@@ -373,11 +370,17 @@
         });
     }
 
+    // --- [Logic Modified] User Discard Logic ---
     function handleTileClick(index) {
         if(phase !== 'A' || turn !== 'user') return;
+        
+        // 1. Discard tile
         const discarded = players.user.hand.splice(index, 1)[0];
         players.user.river.push(discarded);
-        sortHand('user'); updateUI(); // Sort hand after discard
+        
+        // 2. Sort remaining hand (This merges the gap)
+        sortHand('user'); 
+        updateUI();
         
         pendingDiscard = discarded; pendingDiscarder = 'user';
         if(checkDraw()) return;
@@ -424,15 +427,20 @@
         }
     }
 
+    // --- [Logic Modified] Turn Flow ---
     function proceedToUserTurn() {
         turn = 'user';
-        sortHand('user'); // Sort old tiles
-        drawTile('user'); // New tile at end
+        
+        // 1. 先排序舊的手牌
+        sortHand('user');
+        
+        // 2. 再摸新牌 (這張牌會直接 push 到陣列最後)
+        drawTile('user'); 
+        
         updateUI(); 
         showStatus("Phase A: 你的回合");
     }
 
-    // --- Naki ---
     function checkPon(hand, tile) { return hand.filter(t => t.id === tile.id).length >= 2; }
     function checkKan(hand, tile) { return hand.filter(t => t.id === tile.id).length === 3; }
     function checkChi(hand, tile) {
@@ -461,6 +469,8 @@
         if(type === 'PON') performPon('user', pendingDiscard);
         else if (type === 'KAN') performKan('user', pendingDiscard);
         else if (type === 'CHI') performChi('user', pendingDiscard); 
+        
+        // 鳴牌後手牌變少，這裡簡單處理：先排序
         sortHand('user');
         turn = 'user'; updateUI(); showStatus("鳴牌成功，請打出一張牌");
     }
@@ -539,30 +549,35 @@
         if(attacker === 'user') {
             if(isWin) {
                 setTimeout(() => {
-                    if(confirm(`摸到 ${tile.char}！\n宣告自摸嗎？`)) { 
-                        showUraDora(); showInfo("胡牌！", "自摸獲勝！", onRoundEnd); 
-                    } else { players.user.river.push(tile); updateUI(); setTimeout(executeDrawLoop, 500); }
+                    if(confirm(`摸到 ${tile.char}！\n宣告自摸嗎？`)) { showUraDora(); showInfo("胡牌！", "自摸獲勝！", onRoundEnd); }
+                    else { players.user.river.push(tile); updateUI(); setTimeout(executeDrawLoop, 500); }
                 }, 100);
             } else { showStatus(msg + " ...未中"); players.user.river.push(tile); setTimeout(executeDrawLoop, 1000); }
         } else {
             showStatus(msg);
-            if(isWin) { 
-                players.ai.hand.push(tile); showUraDora(); revealAIHand(); 
-                setTimeout(() => showInfo("敗北", `AI 自摸 ${tile.char}！`, onRoundEnd), 500); 
-            } else { players.ai.river.push(tile); setTimeout(executeDrawLoop, 800); }
+            if(isWin) { players.ai.hand.push(tile); showUraDora(); revealAIHand(); setTimeout(() => showInfo("敗北", `AI 自摸 ${tile.char}！`, onRoundEnd), 500); }
+            else { players.ai.river.push(tile); setTimeout(executeDrawLoop, 800); }
         }
     }
 
     // --- UI Update ---
     function updateUI() {
         const userDiv = document.getElementById('user-hand'); userDiv.innerHTML = '';
+        
+        // [Logic Update] Check for visual gap
+        // 條件：手牌張數除以3餘2 (e.g. 14, 11, 8...) 且是玩家回合
         const needGap = (players.user.hand.length % 3 === 2) && (turn === 'user') && (phase === 'A');
 
         players.user.hand.forEach((tile, idx) => {
             let d = document.createElement('div'); d.className = 'tile';
             if(isDora(tile.id)) d.classList.add('dora-tile');
             d.innerText = tile.char; d.onclick = () => handleTileClick(idx);
-            if(needGap && idx === players.user.hand.length - 1) d.style.marginLeft = "20px";
+            
+            // [Visual Fix] Apply margin if it's the last tile
+            if(needGap && idx === players.user.hand.length - 1) {
+                d.style.marginLeft = "20px";
+            }
+
             userDiv.appendChild(d);
         });
         renderMelds('user', 'user-melds');
@@ -623,7 +638,6 @@
         document.getElementById('picker-title').innerText = title; document.getElementById('picker-desc').innerText = desc;
         selectedTiles = []; renderPickerTiles(); updatePickedDisplay();
         
-        // [New Logic] Toggle transparency class based on mode
         const modalOverlay = document.getElementById('picker-modal');
         const modalContent = modalOverlay.querySelector('.modal-content');
         if (pickerMode === 'GUESS') {
@@ -659,7 +673,6 @@
         }
         updatePickedDisplay();
     }
-    function updatePickedDisplay() { document.getElementById('picked-display').innerHTML = selectedTiles.map(id=>TILES[id]).join(' '); }
     function submitPicker() {
         if(selectedTiles.length === 0) return;
         if(pickerMode === 'DECLARE') {
