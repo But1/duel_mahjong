@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>二人麻將 v0.2 - 完整修復版</title>
+    <title>二人麻將 v0.1.2 - 按鈕修復版</title>
     <style>
         :root {
             --bg-color: #2e7d32;
@@ -99,10 +99,11 @@
         }
         .dora-label { color: #ffd700; font-weight: bold; font-size: 12px; text-align: center; }
 
-        /* [修正 2] 按鈕遮擋修復 */
+        /* --- [修正點] 按鈕遮擋問題修復 --- */
         #naki-buttons {
-            position: absolute; bottom: 160px; display: flex; gap: 10px; z-index: 150; display: none;
-            pointer-events: none; /* 讓滑鼠穿透容器 */
+            position: absolute; bottom: 160px; display: flex; gap: 10px; z-index: 150; 
+            display: none;
+            pointer-events: none; /* 讓滑鼠穿透這個容器 */
         }
         .btn-naki {
             background: rgba(255, 255, 255, 0.9); color: #d32f2f;
@@ -144,14 +145,14 @@
             border: 2px solid #ffd700;
         }
         
-        .controls { margin-top: 5px; display: flex; gap: 10px; position: relative; z-index: 100; }
+        .controls { margin-top: 5px; display: flex; gap: 10px;}
         button {
             background: #ffb300; border: none; padding: 8px 16px;
             font-weight: bold; cursor: pointer; border-radius: 6px; font-size: 16px;
         }
         button:disabled { background: #757575; color: #aaa; cursor: not-allowed; }
 
-        /* Modal Styles */
+        /* Modal Styles (保持原樣) */
         .modal-overlay {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(0,0,0,0.85); display: none; justify-content: center; align-items: center;
@@ -164,7 +165,7 @@
             transition: all 0.3s;
         }
         
-        /* Glass Mode */
+        /* Transparent Glass Mode for Guessing */
         .modal-overlay.glass-mode {
             background: rgba(0, 0, 0, 0.2); 
             backdrop-filter: none; 
@@ -271,9 +272,6 @@
     let doraIndicator, uraDoraIndicator;
     let uraRevealed = false;
 
-    // [新增] 宣告狀態旗標
-    let isDeclaring = false;
-
     let players = {
         user: { hand: [], melds: [], river: [], score: 30000, isTenpai: false, waits: [] },
         ai: { hand: [], melds: [], river: [], score: 30000, isTenpai: false, waits: [] }
@@ -292,9 +290,7 @@
         deck = shuffle(allTiles);
         deadWall = deck.splice(0, 14);
         doraIndicator = deadWall[4]; uraDoraIndicator = deadWall[5];
-        
         uraRevealed = false;
-        isDeclaring = false; // 重置
 
         players.user.hand = []; players.user.melds = []; players.user.river = []; 
         players.user.isTenpai = false; players.user.waits = [];
@@ -379,30 +375,6 @@
 
     function handleTileClick(index) {
         if(phase !== 'A' || turn !== 'user') return;
-        
-        // --- [修正 1] 宣告聽牌後的出牌邏輯 ---
-        if(isDeclaring) {
-            // 規則：必須打出最右邊剛摸的那張
-            if(index !== players.user.hand.length - 1) {
-                alert("宣告聽牌時，請模切（打出最右邊剛摸到的牌）！");
-                return;
-            }
-            // 打牌
-            const discarded = players.user.hand.splice(index, 1)[0];
-            players.user.river.push(discarded);
-            
-            sortHand('user');
-            updateUI();
-            
-            // 解除宣告狀態，正式進入 Phase B
-            isDeclaring = false;
-            players.user.isTenpai = true;
-            attacker = 'user'; defender = 'ai'; 
-            startPhaseB();
-            return;
-        }
-        // --------------------------------
-
         const discarded = players.user.hand.splice(index, 1)[0];
         players.user.river.push(discarded);
         sortHand('user'); updateUI(); 
@@ -452,11 +424,10 @@
         }
     }
 
-    // --- [修正] 第四點：自摸牌獨立顯示邏輯 ---
     function proceedToUserTurn() {
         turn = 'user';
-        sortHand('user'); // 先整理舊牌
-        drawTile('user'); // 再摸新牌 (放最後)
+        sortHand('user'); // 先整理
+        drawTile('user'); // 再摸牌(放最後)
         updateUI(); 
         showStatus("Phase A: 你的回合");
     }
@@ -483,19 +454,14 @@
     }
     function hideNakiButtons() { document.getElementById('naki-buttons').style.display = 'none'; }
     function skipCall() { hideNakiButtons(); proceedToUserTurn(); }
-    
     function doCall(type) {
         hideNakiButtons(); players[pendingDiscarder].river.pop(); 
         if(type === 'PON') performPon('user', pendingDiscard);
         else if (type === 'KAN') performKan('user', pendingDiscard);
         else if (type === 'CHI') performChi('user', pendingDiscard); 
-        
-        // 鳴牌後也需要打牌，這裡也套用 gap 邏輯 (因為手牌數會變)
-        // 簡單起見，鳴牌後先不 gap，打牌後自然會整理
         sortHand('user');
         turn = 'user'; updateUI(); showStatus("鳴牌成功，請打出一張牌");
     }
-
     function performPon(who, tile) {
         const hand = players[who].hand; let removed = 0, newHand = [], meldTiles = [tile];
         for(let t of hand) { if(t.id === tile.id && removed < 2) { meldTiles.push(t); removed++; } else newHand.push(t); }
@@ -532,8 +498,6 @@
 
     // --- Phase B ---
     function openDeclareModal() {
-        // [修正 3] 只有在玩家回合且手牌滿時(摸了牌)才能按，
-        // 但為了保險，這裡只檢查基本狀態
         if(phase !== 'A' || turn !== 'user') return;
         pickerMode = 'DECLARE'; openPicker("宣告聽牌", "選擇您聽的牌");
     }
@@ -541,13 +505,7 @@
         players.ai.isTenpai = true;
         let count = Math.floor(Math.random() * 2) + 1; 
         players.ai.waits = []; for(let i=0;i<count;i++) players.ai.waits.push(Math.floor(Math.random()*34));
-        
-        // [修正 1] AI 宣告時，必須打出剛摸的牌
-        const discarded = players.ai.hand.pop(); 
-        players.ai.river.push(discarded);
-        updateUI();
-
-        showInfo("AI 宣告", "AI 宣告聽牌！(已模切)", () => { attacker = 'ai'; defender = 'user'; startPhaseB(); });
+        showInfo("AI 宣告", "AI 宣告聽牌！進入 Phase B", () => { attacker = 'ai'; defender = 'user'; startPhaseB(); });
     }
     function startPhaseB() {
         phase = 'B_GUESS'; drawCount = 0; document.getElementById('btn-tenpai').disabled = true;
@@ -592,17 +550,13 @@
     // --- UI Update ---
     function updateUI() {
         const userDiv = document.getElementById('user-hand'); userDiv.innerHTML = '';
-        
-        // [修正 4] 自摸牌 GAP 判定
         const needGap = (players.user.hand.length % 3 === 2) && (turn === 'user') && (phase === 'A');
 
         players.user.hand.forEach((tile, idx) => {
             let d = document.createElement('div'); d.className = 'tile';
             if(isDora(tile.id)) d.classList.add('dora-tile');
             d.innerText = tile.char; d.onclick = () => handleTileClick(idx);
-            
             if(needGap && idx === players.user.hand.length - 1) d.style.marginLeft = "20px";
-            
             userDiv.appendChild(d);
         });
         renderMelds('user', 'user-melds');
@@ -623,15 +577,6 @@
 
         document.getElementById('score-ai').innerText = players.ai.score;
         document.getElementById('score-user').innerText = players.user.score;
-
-        // [修正 3] 強制刷新按鈕狀態
-        const btn = document.getElementById('btn-tenpai');
-        // 只有在 (Phase A) AND (輪到玩家) AND (非宣告進行中) 時才啟用
-        if(phase === 'A' && turn === 'user' && !isDeclaring) {
-            btn.disabled = false;
-        } else {
-            btn.disabled = true;
-        }
     }
 
     function renderMelds(who, elId) {
@@ -710,14 +655,8 @@
     function submitPicker() {
         if(selectedTiles.length === 0) return;
         if(pickerMode === 'DECLARE') {
-            players.user.waits = [...selectedTiles];
-            closePicker(); 
-            
-            // [修正 1] 進入宣告狀態，要求打牌
-            isDeclaring = true;
-            showStatus("請打出剛摸到的牌（最右邊）以確立聽牌！");
-            updateUI(); // 刷新UI以更新狀態
-            
+            players.user.isTenpai = true; players.user.waits = [...selectedTiles];
+            closePicker(); attacker = 'user'; defender = 'ai'; startPhaseB();
         } else if (pickerMode === 'GUESS') {
             if(selectedTiles.length !== 2) { alert("請選 2 張"); return; }
             closePicker(); checkGuess(selectedTiles);
