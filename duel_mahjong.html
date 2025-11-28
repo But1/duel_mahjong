@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>二人麻將 v0.4 - 完美流程版</title>
+    <title>二人麻將 v0.5 - 狀態機重構版</title>
     <style>
         :root {
             --bg-color: #2e7d32;
@@ -80,7 +80,7 @@
         .btn-naki {
             background: rgba(255, 255, 255, 0.9); color: #d32f2f; border: 2px solid #d32f2f; 
             font-size: 20px; font-weight: bold; padding: 5px 15px; border-radius: 50px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5); pointer-events: auto; cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5); pointer-events: auto; transition: transform 0.1s;
         }
         .btn-naki:hover { transform: scale(1.1); background: #fff; }
         
@@ -120,7 +120,7 @@
         }
         button:disabled { background: #757575; color: #aaa; cursor: not-allowed; }
 
-        /* Modal Styles */
+        /* Modal - 強制置中 */
         .modal-overlay {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(0,0,0,0.85); display: none; justify-content: center; align-items: center;
@@ -144,6 +144,8 @@
             display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; 
             margin: 5px 0; padding: 5px; background: #f5f5f5; border-radius: 8px;
         }
+        
+        /* Debug Log */
         #debug-log {
             position: fixed; bottom: 0; right: 0; background: black; color: lime; 
             font-family: monospace; font-size: 10px; padding: 5px; opacity: 0.7; z-index: 20000; pointer-events: none;
@@ -218,12 +220,12 @@
     </div>
 </div>
 
-<div id="debug-log">Log Init...</div>
+<div id="debug-log">Ready.</div>
 
 <script>
     function log(msg) {
         const d = document.getElementById('debug-log');
-        d.innerText = msg + " | " + new Date().toLocaleTimeString();
+        d.innerText = msg;
         console.log(msg);
     }
 
@@ -237,13 +239,15 @@
     let deck = [], deadWall = [];
     let doraIndicator, uraDoraIndicator;
     let uraRevealed = false;
-    let isDeclaring = false;
 
+    // 狀態變數：Phase A, A_DECLARING, B_GUESS, B_DRAW
+    let phase = 'A'; 
+    
     let players = {
         user: { hand: [], melds: [], river: [], score: 30000, isTenpai: false, waits: [] },
         ai: { hand: [], melds: [], river: [], score: 30000, isTenpai: false, waits: [] }
     };
-    let turn = 'user', phase = 'A';
+    let turn = 'user';
     let attacker = null, defender = null;
     let drawCount = 0, maxDraws = 5;
     let pickerMode = '', selectedTiles = [];
@@ -252,15 +256,13 @@
     function resetFullGame() { players.user.score = 30000; players.ai.score = 30000; startNewRound(); }
 
     function startNewRound() {
-        log("New Round Started");
+        log("Start New Round");
         let allTiles = [];
         for(let i=0; i<34; i++) for(let j=0; j<4; j++) allTiles.push({id: i, char: TILES[i], uid: i*4+j});
         deck = shuffle(allTiles);
         deadWall = deck.splice(0, 14);
         doraIndicator = deadWall[4]; uraDoraIndicator = deadWall[5];
-        
         uraRevealed = false;
-        isDeclaring = false;
 
         players.user.hand = []; players.user.melds = []; players.user.river = []; 
         players.user.isTenpai = false; players.user.waits = [];
@@ -272,7 +274,7 @@
 
         for(let i=0; i<13; i++) { drawTile('user'); drawTile('ai'); }
         sortHand('user'); sortHand('ai');
-        drawTile('user'); 
+        drawTile('user'); // 玩家起手第14張
 
         document.getElementById('next-round-btn').style.display = 'none';
         resetDoraUI(); 
@@ -289,8 +291,189 @@
         return array;
     }
 
+    // --- Core Logic: Handle Clicks ---
+    function handleTileClick(index) {
+        if(turn !== 'user') return; // 非玩家回合不反應
+
+        // [核心修正] 分流邏輯：宣告出牌 vs 普通出牌
+        if(phase === 'A_DECLARING') {
+            log("State: A_DECLARING -> Executing Discard");
+            // 執行宣言出牌
+            const discarded = players.user.hand.splice(index, 1)[0];
+            players.user.river.push(discarded);
+            sortHand('user');
+            updateUI();
+            
+            // 狀態切換
+            players.user.isTenpai = true;
+            attacker = 'user'; defender = 'ai';
+            startPhaseB(); // 進入 Phase B
+            return; // [絕對禁止] 繼續往下執行
+        }
+
+        // 普通 Phase A 出牌
+        if(phase === 'A') {
+            const discarded = players.user.hand.splice(index, 1)[0];
+            players.user.river.push(discarded);
+            sortHand('user'); 
+            updateUI(); 
+            
+            pendingDiscard = discarded; pendingDiscarder = 'user';
+            if(checkDraw()) return;
+
+            if(aiCheckCall(discarded)) {
+                showStatus("AI 鳴牌!");
+                setTimeout(() => {
+                    aiExecuteCall(discarded);
+                    turn = 'ai'; setTimeout(aiDiscardPhase, 1000);
+                }, 800);
+            } else {
+                turn = 'ai'; 
+                showStatus("AI 思考中..."); 
+                setTimeout(aiTurn, 800);
+            }
+        }
+    }
+
+    // --- Phase B ---
+    function openDeclareModal() {
+        if(phase !== 'A' || turn !== 'user') return;
+        pickerMode = 'DECLARE'; openPicker("宣告聽牌", "選擇您聽的牌");
+    }
+
+    function aiDeclareTenpai() {
+        players.ai.isTenpai = true;
+        let count = Math.floor(Math.random() * 2) + 1; 
+        players.ai.waits = []; for(let i=0;i<count;i++) players.ai.waits.push(Math.floor(Math.random()*34));
+        
+        // AI 宣言出牌 (模切)
+        const discarded = players.ai.hand.pop(); 
+        players.ai.river.push(discarded);
+        updateUI();
+
+        showInfo("AI 宣告", "AI 宣告聽牌！(已模切)", () => { attacker = 'ai'; defender = 'user'; startPhaseB(); });
+    }
+
+    function startPhaseB() {
+        log("Entering Phase B...");
+        phase = 'B_GUESS'; 
+        drawCount = 0; 
+        document.getElementById('btn-tenpai').disabled = true;
+        hideNakiButtons(); updateUI();
+
+        if(defender === 'user') { 
+            pickerMode = 'GUESS'; 
+            showStatus("Phase B: 請指出 AI 聽的牌");
+            openPicker("Phase B", "指出AI聽的牌"); 
+        }
+        else { 
+            showStatus("Phase B: AI 猜測中..."); 
+            setTimeout(aiGuess, 2000); 
+        }
+    }
+
+    function submitPicker() {
+        if(selectedTiles.length === 0) return;
+        
+        if(pickerMode === 'DECLARE') {
+            players.user.waits = [...selectedTiles];
+            closePicker(); 
+            
+            // [核心修正] 切換到宣告狀態
+            phase = 'A_DECLARING';
+            log("State Changed to: A_DECLARING");
+            showStatus("請打出一張牌以確立聽牌！");
+            updateUI(); // 刷新 UI 以禁用按鈕等
+            
+        } else if (pickerMode === 'GUESS') {
+            if(selectedTiles.length !== 2) { alert("請選 2 張"); return; }
+            closePicker(); checkGuess(selectedTiles);
+        }
+    }
+
+    // --- AI Logic ---
+    function aiTurn() {
+        if(phase !== 'A') return; // Double check
+        drawTile('ai');
+        // AI Tenpai Check
+        if(!players.ai.isTenpai && players.ai.melds.length === 0 && Math.random() < 0.08 && deck.length > 10) {
+            aiDeclareTenpai(); return;
+        } else if (!players.ai.isTenpai && players.ai.melds.length > 0 && Math.random() < 0.1) {
+             aiDeclareTenpai(); return;
+        }
+        aiDiscardPhase();
+    }
+    
+    function aiDiscardPhase() {
+        const discardIdx = Math.floor(Math.random() * players.ai.hand.length);
+        const discarded = players.ai.hand.splice(discardIdx, 1)[0];
+        players.ai.river.push(discarded);
+        updateUI();
+        if(checkDraw()) return;
+
+        pendingDiscard = discarded; pendingDiscarder = 'ai';
+        const canChi = checkChi(players.user.hand, discarded);
+        const canPon = checkPon(players.user.hand, discarded);
+        const canKan = checkKan(players.user.hand, discarded);
+        
+        if(canChi || canPon || canKan) {
+            showNakiButtons(canChi, canPon, canKan); showStatus("是否要鳴牌?");
+        } else {
+            proceedToUserTurn();
+        }
+    }
+
+    function proceedToUserTurn() {
+        turn = 'user';
+        sortHand('user'); drawTile('user'); updateUI(); 
+        showStatus("Phase A: 你的回合");
+    }
+
+    // --- Helpers ---
+    function openPicker(title, desc) {
+        document.getElementById('picker-title').innerText = title; 
+        document.getElementById('picker-desc').innerText = desc;
+        selectedTiles = []; renderPickerTiles(); updatePickedDisplay();
+        
+        const modalOverlay = document.getElementById('picker-modal');
+        const modalContent = modalOverlay.querySelector('.modal-content');
+        modalOverlay.style.display = 'flex'; 
+
+        if (pickerMode === 'GUESS') {
+            modalOverlay.classList.add('glass-mode');
+            modalContent.classList.add('glass-mode');
+        } else {
+            modalOverlay.classList.remove('glass-mode');
+            modalContent.classList.remove('glass-mode');
+        }
+    }
+    function closePicker() { document.getElementById('picker-modal').style.display = 'none'; }
+    
+    function renderPickerTiles() {
+        const area = document.getElementById('tile-picker-area'); area.innerHTML = '';
+        const groups = [{start:0,end:8},{start:9,end:17},{start:18,end:26},{start:27,end:33}];
+        groups.forEach(g => {
+            let gd = document.createElement('div'); gd.className = 'tile-picker-group';
+            for(let i=g.start; i<=g.end; i++) {
+                let t = document.createElement('div'); t.className = 'tile'; t.innerText = TILES[i];
+                t.onclick = () => togglePick(i, t); t.dataset.id = i; gd.appendChild(t);
+            }
+            area.appendChild(gd);
+        });
+    }
+    function togglePick(id, el) {
+        if(selectedTiles.includes(id)) { selectedTiles = selectedTiles.filter(x=>x!==id); el.classList.remove('selected'); }
+        else {
+            if(pickerMode === 'GUESS' && selectedTiles.length >= 2) {
+                let f = selectedTiles.shift(); document.querySelector(`.tile-picker-group .tile[data-id="${f}"]`)?.classList.remove('selected');
+            }
+            selectedTiles.push(id); el.classList.add('selected');
+        }
+        updatePickedDisplay();
+    }
+    function updatePickedDisplay() { document.getElementById('picked-display').innerHTML = selectedTiles.map(id=>TILES[id]).join(' '); }
+
     function onRoundEnd() {
-        log("Round Ended");
         revealAIHand();
         document.getElementById('next-round-btn').style.display = 'block';
         showStatus("本局結束。請檢討牌局，準備好後點擊按鈕。");
@@ -341,92 +524,6 @@
             d.innerText = tile.char; d.style.boxShadow = "0 0 5px yellow";
             aiDiv.appendChild(d);
         });
-    }
-
-    // --- 核心邏輯：處理玩家點擊 ---
-    function handleTileClick(index) {
-        if(phase !== 'A' || turn !== 'user') return;
-        
-        // 1. 如果處於宣告狀態 (isDeclaring)
-        if(isDeclaring) {
-            log("User Confirmed Tenpai by Discarding");
-            // 打出選定的牌
-            const discarded = players.user.hand.splice(index, 1)[0];
-            players.user.river.push(discarded);
-            sortHand('user');
-            updateUI();
-            
-            // 結束宣告，正式進入 Phase B
-            isDeclaring = false;
-            players.user.isTenpai = true;
-            attacker = 'user'; 
-            defender = 'ai'; 
-            
-            startPhaseB();
-            return; // 阻止後續程式執行，進入 Phase B
-        }
-
-        // 2. 如果是正常出牌
-        const discarded = players.user.hand.splice(index, 1)[0];
-        players.user.river.push(discarded);
-        sortHand('user'); 
-        updateUI(); 
-        
-        pendingDiscard = discarded; pendingDiscarder = 'user';
-        if(checkDraw()) return;
-
-        // 檢查 AI 是否鳴牌
-        if(aiCheckCall(discarded)) {
-            showStatus("AI 鳴牌!");
-            setTimeout(() => {
-                aiExecuteCall(discarded);
-                turn = 'ai'; setTimeout(aiDiscardPhase, 1000);
-            }, 800);
-        } else {
-            // AI 正常回合
-            turn = 'ai'; 
-            showStatus("AI 思考中..."); 
-            setTimeout(aiTurn, 800);
-        }
-    }
-
-    function aiTurn() {
-        if(phase !== 'A') return;
-        drawTile('ai');
-        if(!players.ai.isTenpai && players.ai.melds.length === 0 && Math.random() < 0.08 && deck.length > 10) {
-            aiDeclareTenpai(); return;
-        } else if (!players.ai.isTenpai && players.ai.melds.length > 0 && Math.random() < 0.1) {
-             aiDeclareTenpai(); return;
-        }
-        aiDiscardPhase();
-    }
-    
-    function aiDiscardPhase() {
-        const discardIdx = Math.floor(Math.random() * players.ai.hand.length);
-        const discarded = players.ai.hand.splice(discardIdx, 1)[0];
-        players.ai.river.push(discarded);
-        updateUI();
-        if(checkDraw()) return;
-
-        pendingDiscard = discarded; pendingDiscarder = 'ai';
-        const canChi = checkChi(players.user.hand, discarded);
-        const canPon = checkPon(players.user.hand, discarded);
-        const canKan = checkKan(players.user.hand, discarded);
-        
-        if(canChi || canPon || canKan) {
-            showNakiButtons(canChi, canPon, canKan); showStatus("是否要鳴牌?");
-        } else {
-            proceedToUserTurn();
-        }
-    }
-
-    // --- 流程控制：切換到玩家回合 ---
-    function proceedToUserTurn() {
-        turn = 'user';
-        sortHand('user'); // 先整理舊牌
-        drawTile('user'); // 再摸牌，顯示在最右邊
-        updateUI(); 
-        showStatus("Phase A: 你的回合");
     }
 
     function checkPon(hand, tile) { return hand.filter(t => t.id === tile.id).length >= 2; }
@@ -491,36 +588,6 @@
         return false;
     }
 
-    // --- Phase B ---
-    function openDeclareModal() {
-        if(phase !== 'A' || turn !== 'user') return;
-        log("Opening Declare Modal");
-        pickerMode = 'DECLARE'; openPicker("宣告聽牌", "選擇您聽的牌");
-    }
-    function aiDeclareTenpai() {
-        players.ai.isTenpai = true;
-        let count = Math.floor(Math.random() * 2) + 1; 
-        players.ai.waits = []; for(let i=0;i<count;i++) players.ai.waits.push(Math.floor(Math.random()*34));
-        
-        const discarded = players.ai.hand.pop(); 
-        players.ai.river.push(discarded);
-        updateUI();
-
-        log("AI Declared");
-        showInfo("AI 宣告", "AI 宣告聽牌！(已模切)", () => { attacker = 'ai'; defender = 'user'; startPhaseB(); });
-    }
-    function startPhaseB() {
-        log("Phase B Started");
-        phase = 'B_GUESS'; drawCount = 0; document.getElementById('btn-tenpai').disabled = true;
-        hideNakiButtons(); updateUI();
-        if(defender === 'user') { 
-            pickerMode = 'GUESS'; 
-            log("User Guessing...");
-            showStatus("Phase B: 請指出 AI 聽的牌");
-            openPicker("Phase B", "指出AI聽的牌"); 
-        }
-        else { showStatus("Phase B: AI 猜測中..."); setTimeout(aiGuess, 2000); }
-    }
     function aiGuess() {
         const g1 = Math.floor(Math.random()*34); let g2 = Math.floor(Math.random()*34); while(g2===g1) g2=Math.floor(Math.random()*34);
         const hit = players.user.waits.some(w => [g1,g2].includes(w));
@@ -555,7 +622,6 @@
         }
     }
 
-    // --- UI Update ---
     function updateUI() {
         const userDiv = document.getElementById('user-hand'); userDiv.innerHTML = '';
         const needGap = (players.user.hand.length % 3 === 2) && (turn === 'user') && (phase === 'A');
@@ -579,6 +645,7 @@
         document.getElementById('wall-count').innerText = deck.length;
         
         let pText = "A (準備)";
+        if(phase === 'A_DECLARING') pText = "A (宣告中)";
         if(phase === 'B_GUESS') pText = "B (識破中)";
         if(phase === 'B_DRAW') pText = `B (自摸 ${drawCount}/5)`;
         document.getElementById('phase-indicator').innerText = pText;
@@ -586,36 +653,13 @@
         document.getElementById('score-ai').innerText = players.ai.score;
         document.getElementById('score-user').innerText = players.user.score;
 
-        // [按鈕控制]：輪到你 且 牌數正確(14張) 時，允許按按鈕
+        // Button logic: Enabled only in Phase A, User turn, Hand size = 14 (just drawn)
         const btn = document.getElementById('btn-tenpai');
-        // 手牌 %3 === 2 代表剛摸完牌還沒打 (14, 11, 8...)
-        if(phase === 'A' && turn === 'user' && !isDeclaring && players.user.hand.length % 3 === 2) {
+        if(phase === 'A' && turn === 'user' && players.user.hand.length % 3 === 2) {
             btn.disabled = false;
         } else {
             btn.disabled = true;
         }
-    }
-
-    function renderMelds(who, elId) {
-        const div = document.getElementById(elId); div.innerHTML = '';
-        players[who].melds.forEach(group => {
-            let gDiv = document.createElement('div'); gDiv.className = 'meld-group';
-            group.forEach(tile => {
-                let d = document.createElement('div'); d.className = 'tile';
-                if(isDora(tile.id)) d.classList.add('dora-tile');
-                d.innerText = tile.char; gDiv.appendChild(d);
-            });
-            div.appendChild(gDiv);
-        });
-    }
-
-    function renderRiver(who, elId) {
-        const div = document.getElementById(elId); div.innerHTML = '';
-        players[who].river.forEach(tile => {
-            let d = document.createElement('div'); d.className = 'tile';
-            if(isDora(tile.id)) d.classList.add('dora-tile');
-            d.innerText = tile.char; div.appendChild(d);
-        });
     }
 
     function showStatus(text) { document.getElementById('status-msg').innerText = text; }
@@ -628,61 +672,6 @@
     function closeInfo() {
         document.getElementById('info-panel').style.display = 'none';
         if(onInfoClose) { const cb = onInfoClose; onInfoClose = null; cb(); }
-    }
-
-    function openPicker(title, desc) {
-        log("Opening Picker: " + pickerMode);
-        document.getElementById('picker-title').innerText = title; document.getElementById('picker-desc').innerText = desc;
-        selectedTiles = []; renderPickerTiles(); updatePickedDisplay();
-        
-        const modalOverlay = document.getElementById('picker-modal');
-        const modalContent = modalOverlay.querySelector('.modal-content');
-        
-        modalOverlay.style.display = 'flex'; // Force Flex
-
-        if (pickerMode === 'GUESS') {
-            modalOverlay.classList.add('glass-mode');
-            modalContent.classList.add('glass-mode');
-        } else {
-            modalOverlay.classList.remove('glass-mode');
-            modalContent.classList.remove('glass-mode');
-        }
-    }
-    function closePicker() { document.getElementById('picker-modal').style.display = 'none'; }
-    function renderPickerTiles() {
-        const area = document.getElementById('tile-picker-area'); area.innerHTML = '';
-        const groups = [{start:0,end:8},{start:9,end:17},{start:18,end:26},{start:27,end:33}];
-        groups.forEach(g => {
-            let gd = document.createElement('div'); gd.className = 'tile-picker-group';
-            for(let i=g.start; i<=g.end; i++) {
-                let t = document.createElement('div'); t.className = 'tile'; t.innerText = TILES[i];
-                t.onclick = () => togglePick(i, t); t.dataset.id = i; gd.appendChild(t);
-            }
-            area.appendChild(gd);
-        });
-    }
-    function togglePick(id, el) {
-        if(selectedTiles.includes(id)) { selectedTiles = selectedTiles.filter(x=>x!==id); el.classList.remove('selected'); }
-        else {
-            if(pickerMode === 'GUESS' && selectedTiles.length >= 2) {
-                let f = selectedTiles.shift(); document.querySelector(`.tile-picker-group .tile[data-id="${f}"]`)?.classList.remove('selected');
-            }
-            selectedTiles.push(id); el.classList.add('selected');
-        }
-        updatePickedDisplay();
-    }
-    function submitPicker() {
-        if(selectedTiles.length === 0) return;
-        if(pickerMode === 'DECLARE') {
-            players.user.waits = [...selectedTiles];
-            closePicker(); 
-            isDeclaring = true;
-            showStatus("請打出任意一張牌以確立聽牌！");
-            updateUI(); // 刷新按鈕狀態(變灰)
-        } else if (pickerMode === 'GUESS') {
-            if(selectedTiles.length !== 2) { alert("請選 2 張"); return; }
-            closePicker(); checkGuess(selectedTiles);
-        }
     }
 
     startNewRound();
