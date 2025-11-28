@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>二人麻將 v0.1.2 - 按鈕修復版</title>
+    <title>二人麻將 v0.4 - 完美流程版</title>
     <style>
         :root {
             --bg-color: #2e7d32;
@@ -37,28 +37,16 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
         
-        /* 區域佈局 */
         .player-zone { padding: 5px 15px; min-height: 140px; position: relative; display: flex; flex-direction: column; align-items: center; }
-        .ai-zone {
-            border-bottom: 2px solid rgba(255,255,255,0.2);
-            justify-content: flex-start; padding-top: 15px;
-        }
-        .user-zone {
-            border-top: 2px solid rgba(255,255,255,0.2);
-            justify-content: flex-end; padding-bottom: 10px;
-        }
-        .center-zone {
-            flex-grow: 1; display: flex; justify-content: center; align-items: center;
-            flex-direction: column; position: relative;
-        }
+        .ai-zone { border-bottom: 2px solid rgba(255,255,255,0.2); justify-content: flex-start; padding-top: 15px; }
+        .user-zone { border-top: 2px solid rgba(255,255,255,0.2); justify-content: flex-end; padding-bottom: 10px; }
+        .center-zone { flex-grow: 1; display: flex; justify-content: center; align-items: center; flex-direction: column; position: relative; }
 
-        /* 手牌容器 */
         .hand-container { display: flex; align-items: flex-end; gap: 20px; height: 70px; margin-bottom: 5px; }
         .hand-tiles { display: flex; align-items: flex-end; }
         .meld-tiles { display: flex; gap: 10px; opacity: 0.9; }
         .meld-group { display: flex; margin-left: 5px; border-bottom: 3px solid rgba(0,0,0,0.3); }
 
-        /* 牌樣式 */
         .tile {
             width: var(--tile-w); height: var(--tile-h);
             background: linear-gradient(135deg, #fff 0%, #f0f0f0 100%);
@@ -72,45 +60,27 @@
         .tile:hover { transform: translateY(-4px); }
         .tile.selected { border: 3px solid #d32f2f; transform: translateY(-8px); }
         .tile.hidden { background: #d88e6c; color: transparent; border: 1px solid #a16a4f; } 
-        
-        /* 寶牌高光 */
-        .tile.dora-tile { 
-            box-shadow: 0 0 8px 3px #ffd700, inset 0 0 10px rgba(255, 215, 0, 0.3); 
-            border: 1px solid #b7950b; z-index: 10;
-        }
-        
+        .tile.dora-tile { box-shadow: 0 0 8px 3px #ffd700, inset 0 0 10px rgba(255, 215, 0, 0.3); border: 1px solid #b7950b; z-index: 10; }
         .meld-group .tile { transform: scale(0.9); margin: 0; cursor: default; }
-        .meld-group .tile:hover { transform: scale(0.9); }
 
-        /* 牌河 */
         .river {
             display: flex; flex-wrap: wrap; width: 360px; height: 90px;
             background: rgba(0,0,0,0.15); border-radius: 6px; padding: 5px;
             justify-content: flex-start; align-content: flex-start; margin: 5px;
         }
         .river .tile { width: 28px; height: 38px; font-size: 24px; margin: 1px; cursor: default; box-shadow: none; }
-        .river .tile:hover { transform: none; }
         .river .tile.dora-tile { box-shadow: 0 0 4px 1px #ffd700; }
 
-        /* 寶牌區 */
-        #dora-area {
-            display: flex; gap: 10px; margin-bottom: 5px;
-            background: rgba(0,0,0,0.3); padding: 5px 15px; border-radius: 8px;
-        }
+        #dora-area { display: flex; gap: 10px; margin-bottom: 5px; background: rgba(0,0,0,0.3); padding: 5px 15px; border-radius: 8px; }
         .dora-label { color: #ffd700; font-weight: bold; font-size: 12px; text-align: center; }
 
-        /* --- [修正點] 按鈕遮擋問題修復 --- */
         #naki-buttons {
-            position: absolute; bottom: 160px; display: flex; gap: 10px; z-index: 150; 
-            display: none;
-            pointer-events: none; /* 讓滑鼠穿透這個容器 */
+            position: absolute; bottom: 160px; display: flex; gap: 10px; z-index: 150; display: none; pointer-events: none; 
         }
         .btn-naki {
-            background: rgba(255, 255, 255, 0.9); color: #d32f2f;
-            border: 2px solid #d32f2f; font-size: 20px; font-weight: bold;
-            padding: 5px 15px; border-radius: 50px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: transform 0.1s;
-            pointer-events: auto; /* 按鈕本身恢復可點擊 */
+            background: rgba(255, 255, 255, 0.9); color: #d32f2f; border: 2px solid #d32f2f; 
+            font-size: 20px; font-weight: bold; padding: 5px 15px; border-radius: 50px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5); pointer-events: auto; cursor: pointer;
         }
         .btn-naki:hover { transform: scale(1.1); background: #fff; }
         
@@ -120,10 +90,8 @@
             border: 2px solid #fff; border-radius: 50px; box-shadow: 0 0 20px rgba(0,0,0,0.5);
             cursor: pointer; z-index: 100; animation: pulse 1.5s infinite; margin-top: 15px;
         }
-        #next-round-btn:hover { filter: brightness(1.2); }
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
 
-        /* UI 分數 */
         .score-badge {
             position: absolute; background: rgba(0,0,0,0.6); padding: 5px 12px;
             border-radius: 8px; font-family: 'Consolas', monospace; color: #ffd700; 
@@ -141,54 +109,44 @@
         #info-panel {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: rgba(0,0,0,0.95); padding: 30px; border-radius: 12px;
-            text-align: center; z-index: 200; display: none; min-width: 300px;
+            text-align: center; z-index: 500; display: none; min-width: 300px;
             border: 2px solid #ffd700;
         }
         
-        .controls { margin-top: 5px; display: flex; gap: 10px;}
+        .controls { margin-top: 5px; display: flex; gap: 10px; position: relative; z-index: 100; }
         button {
             background: #ffb300; border: none; padding: 8px 16px;
             font-weight: bold; cursor: pointer; border-radius: 6px; font-size: 16px;
         }
         button:disabled { background: #757575; color: #aaa; cursor: not-allowed; }
 
-        /* Modal Styles (保持原樣) */
+        /* Modal Styles */
         .modal-overlay {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(0,0,0,0.85); display: none; justify-content: center; align-items: center;
-            z-index: 300; backdrop-filter: blur(5px);
-            transition: background 0.3s;
+            z-index: 10000 !important; backdrop-filter: blur(5px);
         }
         .modal-content {
             background: #fff; color: #333; padding: 25px; border-radius: 12px; 
-            max-width: 700px; width: 95%; text-align: center;
-            transition: all 0.3s;
+            max-width: 700px; width: 95%; text-align: center; max-height: 90vh; overflow-y: auto;
         }
         
-        /* Transparent Glass Mode for Guessing */
-        .modal-overlay.glass-mode {
-            background: rgba(0, 0, 0, 0.2); 
-            backdrop-filter: none; 
-            align-items: flex-end; 
-            padding-bottom: 50px;
-        }
+        /* Glass Mode */
+        .modal-overlay.glass-mode { background: rgba(0, 0, 0, 0.2); backdrop-filter: none; }
         .modal-content.glass-mode {
-            background: rgba(20, 40, 20, 0.9); 
-            border: 2px solid rgba(255, 255, 255, 0.5);
-            color: #fff;
-            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            background: rgba(20, 40, 20, 0.95); border: 2px solid rgba(255, 255, 255, 0.5);
+            color: #fff; box-shadow: 0 0 20px rgba(0,0,0,0.8);
         }
-        .modal-content.glass-mode #picked-display {
-            color: #ffeb3b !important; 
-            text-shadow: 1px 1px 2px black;
-        }
-        .modal-content.glass-mode .tile-picker-group {
-            background: rgba(255, 255, 255, 0.15); 
-        }
+        .modal-content.glass-mode #picked-display { color: #ffeb3b !important; text-shadow: 1px 1px 2px black; }
+        .modal-content.glass-mode .tile-picker-group { background: rgba(255, 255, 255, 0.1); }
         
         .tile-picker-group {
             display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; 
             margin: 5px 0; padding: 5px; background: #f5f5f5; border-radius: 8px;
+        }
+        #debug-log {
+            position: fixed; bottom: 0; right: 0; background: black; color: lime; 
+            font-family: monospace; font-size: 10px; padding: 5px; opacity: 0.7; z-index: 20000; pointer-events: none;
         }
     </style>
 </head>
@@ -260,7 +218,15 @@
     </div>
 </div>
 
+<div id="debug-log">Log Init...</div>
+
 <script>
+    function log(msg) {
+        const d = document.getElementById('debug-log');
+        d.innerText = msg + " | " + new Date().toLocaleTimeString();
+        console.log(msg);
+    }
+
     const TILES = [
         "🀇","🀈","🀉","🀊","🀋","🀌","🀍","🀎","🀏", 
         "🀙","🀚","🀛","🀜","🀝","🀞","🀟","🀠","🀡", 
@@ -271,6 +237,7 @@
     let deck = [], deadWall = [];
     let doraIndicator, uraDoraIndicator;
     let uraRevealed = false;
+    let isDeclaring = false;
 
     let players = {
         user: { hand: [], melds: [], river: [], score: 30000, isTenpai: false, waits: [] },
@@ -285,12 +252,15 @@
     function resetFullGame() { players.user.score = 30000; players.ai.score = 30000; startNewRound(); }
 
     function startNewRound() {
+        log("New Round Started");
         let allTiles = [];
         for(let i=0; i<34; i++) for(let j=0; j<4; j++) allTiles.push({id: i, char: TILES[i], uid: i*4+j});
         deck = shuffle(allTiles);
         deadWall = deck.splice(0, 14);
         doraIndicator = deadWall[4]; uraDoraIndicator = deadWall[5];
+        
         uraRevealed = false;
+        isDeclaring = false;
 
         players.user.hand = []; players.user.melds = []; players.user.river = []; 
         players.user.isTenpai = false; players.user.waits = [];
@@ -308,7 +278,6 @@
         resetDoraUI(); 
         updateUI();
         showStatus("Phase A: 你的回合");
-        document.getElementById('btn-tenpai').disabled = false;
         closePicker(); hideNakiButtons();
     }
 
@@ -321,6 +290,7 @@
     }
 
     function onRoundEnd() {
+        log("Round Ended");
         revealAIHand();
         document.getElementById('next-round-btn').style.display = 'block';
         showStatus("本局結束。請檢討牌局，準備好後點擊按鈕。");
@@ -373,15 +343,39 @@
         });
     }
 
+    // --- 核心邏輯：處理玩家點擊 ---
     function handleTileClick(index) {
         if(phase !== 'A' || turn !== 'user') return;
+        
+        // 1. 如果處於宣告狀態 (isDeclaring)
+        if(isDeclaring) {
+            log("User Confirmed Tenpai by Discarding");
+            // 打出選定的牌
+            const discarded = players.user.hand.splice(index, 1)[0];
+            players.user.river.push(discarded);
+            sortHand('user');
+            updateUI();
+            
+            // 結束宣告，正式進入 Phase B
+            isDeclaring = false;
+            players.user.isTenpai = true;
+            attacker = 'user'; 
+            defender = 'ai'; 
+            
+            startPhaseB();
+            return; // 阻止後續程式執行，進入 Phase B
+        }
+
+        // 2. 如果是正常出牌
         const discarded = players.user.hand.splice(index, 1)[0];
         players.user.river.push(discarded);
-        sortHand('user'); updateUI(); 
+        sortHand('user'); 
+        updateUI(); 
         
         pendingDiscard = discarded; pendingDiscarder = 'user';
         if(checkDraw()) return;
 
+        // 檢查 AI 是否鳴牌
         if(aiCheckCall(discarded)) {
             showStatus("AI 鳴牌!");
             setTimeout(() => {
@@ -389,7 +383,10 @@
                 turn = 'ai'; setTimeout(aiDiscardPhase, 1000);
             }, 800);
         } else {
-            turn = 'ai'; showStatus("AI 思考中..."); setTimeout(aiTurn, 800);
+            // AI 正常回合
+            turn = 'ai'; 
+            showStatus("AI 思考中..."); 
+            setTimeout(aiTurn, 800);
         }
     }
 
@@ -409,7 +406,6 @@
         const discarded = players.ai.hand.splice(discardIdx, 1)[0];
         players.ai.river.push(discarded);
         updateUI();
-        
         if(checkDraw()) return;
 
         pendingDiscard = discarded; pendingDiscarder = 'ai';
@@ -424,10 +420,11 @@
         }
     }
 
+    // --- 流程控制：切換到玩家回合 ---
     function proceedToUserTurn() {
         turn = 'user';
-        sortHand('user'); // 先整理
-        drawTile('user'); // 再摸牌(放最後)
+        sortHand('user'); // 先整理舊牌
+        drawTile('user'); // 再摸牌，顯示在最右邊
         updateUI(); 
         showStatus("Phase A: 你的回合");
     }
@@ -459,8 +456,7 @@
         if(type === 'PON') performPon('user', pendingDiscard);
         else if (type === 'KAN') performKan('user', pendingDiscard);
         else if (type === 'CHI') performChi('user', pendingDiscard); 
-        sortHand('user');
-        turn = 'user'; updateUI(); showStatus("鳴牌成功，請打出一張牌");
+        sortHand('user'); turn = 'user'; updateUI(); showStatus("鳴牌成功，請打出一張牌");
     }
     function performPon(who, tile) {
         const hand = players[who].hand; let removed = 0, newHand = [], meldTiles = [tile];
@@ -470,8 +466,7 @@
     function performKan(who, tile) {
         const hand = players[who].hand; let removed = 0, newHand = [], meldTiles = [tile];
         for(let t of hand) { if(t.id === tile.id && removed < 3) { meldTiles.push(t); removed++; } else newHand.push(t); }
-        players[who].hand = newHand; players[who].melds.push(meldTiles); 
-        drawRinshan(who); 
+        players[who].hand = newHand; players[who].melds.push(meldTiles); drawRinshan(who); 
     }
     function performChi(who, tile) {
         const hand = players[who].hand; let ids = hand.map(t => t.id); let t = tile.id;
@@ -499,18 +494,31 @@
     // --- Phase B ---
     function openDeclareModal() {
         if(phase !== 'A' || turn !== 'user') return;
+        log("Opening Declare Modal");
         pickerMode = 'DECLARE'; openPicker("宣告聽牌", "選擇您聽的牌");
     }
     function aiDeclareTenpai() {
         players.ai.isTenpai = true;
         let count = Math.floor(Math.random() * 2) + 1; 
         players.ai.waits = []; for(let i=0;i<count;i++) players.ai.waits.push(Math.floor(Math.random()*34));
-        showInfo("AI 宣告", "AI 宣告聽牌！進入 Phase B", () => { attacker = 'ai'; defender = 'user'; startPhaseB(); });
+        
+        const discarded = players.ai.hand.pop(); 
+        players.ai.river.push(discarded);
+        updateUI();
+
+        log("AI Declared");
+        showInfo("AI 宣告", "AI 宣告聽牌！(已模切)", () => { attacker = 'ai'; defender = 'user'; startPhaseB(); });
     }
     function startPhaseB() {
+        log("Phase B Started");
         phase = 'B_GUESS'; drawCount = 0; document.getElementById('btn-tenpai').disabled = true;
         hideNakiButtons(); updateUI();
-        if(defender === 'user') { pickerMode = 'GUESS'; setTimeout(() => { openPicker("Phase B", "指出AI聽的牌"); }, 500); }
+        if(defender === 'user') { 
+            pickerMode = 'GUESS'; 
+            log("User Guessing...");
+            showStatus("Phase B: 請指出 AI 聽的牌");
+            openPicker("Phase B", "指出AI聽的牌"); 
+        }
         else { showStatus("Phase B: AI 猜測中..."); setTimeout(aiGuess, 2000); }
     }
     function aiGuess() {
@@ -577,6 +585,15 @@
 
         document.getElementById('score-ai').innerText = players.ai.score;
         document.getElementById('score-user').innerText = players.user.score;
+
+        // [按鈕控制]：輪到你 且 牌數正確(14張) 時，允許按按鈕
+        const btn = document.getElementById('btn-tenpai');
+        // 手牌 %3 === 2 代表剛摸完牌還沒打 (14, 11, 8...)
+        if(phase === 'A' && turn === 'user' && !isDeclaring && players.user.hand.length % 3 === 2) {
+            btn.disabled = false;
+        } else {
+            btn.disabled = true;
+        }
     }
 
     function renderMelds(who, elId) {
@@ -614,11 +631,15 @@
     }
 
     function openPicker(title, desc) {
+        log("Opening Picker: " + pickerMode);
         document.getElementById('picker-title').innerText = title; document.getElementById('picker-desc').innerText = desc;
         selectedTiles = []; renderPickerTiles(); updatePickedDisplay();
         
         const modalOverlay = document.getElementById('picker-modal');
         const modalContent = modalOverlay.querySelector('.modal-content');
+        
+        modalOverlay.style.display = 'flex'; // Force Flex
+
         if (pickerMode === 'GUESS') {
             modalOverlay.classList.add('glass-mode');
             modalContent.classList.add('glass-mode');
@@ -626,8 +647,6 @@
             modalOverlay.classList.remove('glass-mode');
             modalContent.classList.remove('glass-mode');
         }
-        
-        modalOverlay.style.display = 'flex';
     }
     function closePicker() { document.getElementById('picker-modal').style.display = 'none'; }
     function renderPickerTiles() {
@@ -655,8 +674,11 @@
     function submitPicker() {
         if(selectedTiles.length === 0) return;
         if(pickerMode === 'DECLARE') {
-            players.user.isTenpai = true; players.user.waits = [...selectedTiles];
-            closePicker(); attacker = 'user'; defender = 'ai'; startPhaseB();
+            players.user.waits = [...selectedTiles];
+            closePicker(); 
+            isDeclaring = true;
+            showStatus("請打出任意一張牌以確立聽牌！");
+            updateUI(); // 刷新按鈕狀態(變灰)
         } else if (pickerMode === 'GUESS') {
             if(selectedTiles.length !== 2) { alert("請選 2 張"); return; }
             closePicker(); checkGuess(selectedTiles);
